@@ -130,9 +130,29 @@ type Message struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-func queryMessages(chanID, lastID int64) ([]Message, error) {
-	msgs := []Message{}
-	err := db.Select(&msgs, "SELECT * FROM message WHERE id > ? AND channel_id = ? ORDER BY id DESC LIMIT 100",
+type MessageAndUser struct {
+	ID              int64     `db:"id"`
+	ChannelID       int64     `db:"channel_id"`
+	UserID          int64     `db:"user_id"`
+	Content         string    `db:"content"`
+	CreatedAt       time.Time `db:"created_at"`
+	UserPk          int64     `db:"user_pk"`
+	UserName        string    `db:"name"`
+	UserSalt        string    `db:"salt"`
+	UserPassword    string    `db:"password"`
+	UserDisplayName string    `db:"display_name"`
+	UserAvatarIcon  string    `db:"avatar_icon"`
+	UserCreatedAt   time.Time `db:"user_created_at"`
+}
+
+func queryMessages(chanID, lastID int64) ([]MessageAndUser, error) {
+	msgs := []MessageAndUser{}
+	err := db.Select(&msgs, "SELECT m.*,"+
+		" u.id AS user_pk, u.name, u.salt, u.password, u.display_name, u.avatar_icon, u.created_at AS user_created_at"+
+		" FROM message AS m"+
+		" LEFT JOIN user AS u"+
+		" ON m.user_id = u.id"+
+		" WHERE m.id > ? AND m.channel_id = ? ORDER BY m.id DESC LIMIT 100",
 		lastID, chanID)
 	return msgs, err
 }
@@ -354,12 +374,15 @@ func postMessage(c echo.Context) error {
 	return c.NoContent(204)
 }
 
-func jsonifyMessage(m Message) (map[string]interface{}, error) {
-	u := User{}
-	err := db.Get(&u, "SELECT name, display_name, avatar_icon FROM user WHERE id = ?",
-		m.UserID)
-	if err != nil {
-		return nil, err
+func jsonifyMessage(m MessageAndUser) (map[string]interface{}, error) {
+	u := User{
+		m.UserPk,
+		m.UserName,
+		m.UserSalt,
+		m.UserPassword,
+		m.UserDisplayName,
+		m.UserAvatarIcon,
+		m.UserCreatedAt,
 	}
 
 	r := make(map[string]interface{})
@@ -507,9 +530,15 @@ func getHistory(c echo.Context) error {
 		return ErrBadReqeust
 	}
 
-	messages := []Message{}
+	messages := []MessageAndUser{}
 	err = db.Select(&messages,
-		"SELECT * FROM message WHERE channel_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+		"SELECT m.*,"+
+			" u.id AS user_pk, u.name, u.salt, u.password, u.display_name, u.avatar_icon, u.created_at AS user_created_at"+
+			" FROM message AS m"+
+			" LEFT JOIN user AS u"+
+			" ON m.user_id = u.id"+
+			" WHERE m.channel_id = ?"+
+			" ORDER BY m.id DESC LIMIT ? OFFSET ?",
 		chID, N, (page-1)*N)
 	if err != nil {
 		return err

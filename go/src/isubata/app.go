@@ -554,14 +554,14 @@ func getProfile(c echo.Context) error {
 	}
 
 	channels := []ChannelInfo{}
-	err = db.Select(&channels, "SELECT id FROM channel ORDER BY id")
+	err = db.Select(&channels, "SELECT * FROM channel ORDER BY id")
 	if err != nil {
 		return err
 	}
 
 	userName := c.Param("user_name")
 	var other User
-	err = db.Get(&other, "SELECT id, name, display_name, avatar_icon FROM user WHERE name = ?", userName)
+	err = db.Get(&other, "SELECT * FROM user WHERE name = ?", userName)
 	if err == sql.ErrNoRows {
 		return echo.ErrNotFound
 	}

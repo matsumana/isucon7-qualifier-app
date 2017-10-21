@@ -36,6 +36,7 @@ var (
 	db            *sqlx.DB
 	ErrBadReqeust = echo.NewHTTPError(http.StatusBadRequest)
 	Channels      = []ChannelInfo{}
+	MessageCounts = make(map[int64]int64)
 )
 
 type Renderer struct {
@@ -116,6 +117,7 @@ func addMessage(channelID, userID int64, content string) (int64, error) {
 	res, err := db.Exec(
 		"INSERT INTO message (channel_id, user_id, content, created_at) VALUES (?, ?, ?, NOW())",
 		channelID, userID, content)
+	refreshMessageCounts(channelID)
 	if err != nil {
 		return 0, err
 	}
@@ -497,7 +499,11 @@ func fetchUnread(c echo.Context) error {
 			if lastID > 0 {
 				err = db.Get(&cnt, query+" AND ? < id", ch.ID, lastID)
 			} else {
-				err = db.Get(&cnt, query, ch.ID)
+				cnt, ok := MessageCounts[ch.ID]
+				if !ok {
+					err = db.Get(&cnt, query, ch.ID)
+					MessageCounts[ch.ID] = cnt
+				}
 			}
 			if err != nil {
 				eChan <- err
@@ -643,6 +649,21 @@ func refreshChannels() error {
 	}
 	l.Lock()
 	Channels = channels
+	l.Unlock()
+
+	return nil
+}
+
+func refreshMessageCounts(id int64) error {
+	var l sync.RWMutex
+	var cnt int64
+	err := db.Get(&cnt,
+		"SELECT COUNT(1) as cnt FROM message WHERE channel_id = ?", id)
+	if err != nil {
+		return err
+	}
+	l.Lock()
+	MessageCounts[id] = cnt
 	l.Unlock()
 
 	return nil

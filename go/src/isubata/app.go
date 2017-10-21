@@ -561,12 +561,14 @@ func getProfile(c echo.Context) error {
 
 	userName := c.Param("user_name")
 	var other User
-	err = db.Get(&other, "SELECT * FROM user WHERE name = ?", userName)
-	if err == sql.ErrNoRows {
-		return echo.ErrNotFound
-	}
-	if err != nil {
-		return err
+	if userName != self.Name { // 検索対象のユーザー名と自分の名前が一致していないときだけ検索する
+		err = db.Get(&other, "SELECT * FROM user WHERE name = ?", userName)
+		if err == sql.ErrNoRows {
+			return echo.ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	return c.Render(http.StatusOK, "profile", map[string]interface{}{

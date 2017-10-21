@@ -24,6 +24,7 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/middleware"
+	"sync"
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 var (
 	db            *sqlx.DB
 	ErrBadReqeust = echo.NewHTTPError(http.StatusBadRequest)
+	Channels      = []ChannelInfo{}
 )
 
 type Renderer struct {
@@ -82,6 +84,10 @@ func init() {
 	db.SetMaxOpenConns(20)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	log.Printf("Succeeded to connect db.")
+	err := refreshChannels()
+	if err != nil {
+		log.Fatal("failed to get channel info: ", err.Error())
+	}
 }
 
 type User struct {
@@ -240,12 +246,8 @@ func getChannel(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	channels := []ChannelInfo{}
-	err = db.Select(&channels, "SELECT * FROM channel ORDER BY id")
-	if err != nil {
-		return err
-	}
 
+	channels := getChannels()
 	var desc string
 	for _, ch := range channels {
 		if ch.ID == int64(cID) {
@@ -531,12 +533,7 @@ func getHistory(c echo.Context) error {
 		mjson = append(mjson, r)
 	}
 
-	channels := []ChannelInfo{}
-	err = db.Select(&channels, "SELECT * FROM channel ORDER BY id")
-	if err != nil {
-		return err
-	}
-
+	channels := getChannels()
 	return c.Render(http.StatusOK, "history", map[string]interface{}{
 		"ChannelID": chID,
 		"Channels":  channels,
@@ -553,12 +550,7 @@ func getProfile(c echo.Context) error {
 		return err
 	}
 
-	channels := []ChannelInfo{}
-	err = db.Select(&channels, "SELECT * FROM channel ORDER BY id")
-	if err != nil {
-		return err
-	}
-
+	channels := getChannels()
 	userName := c.Param("user_name")
 	var other User
 	err = db.Get(&other, "SELECT * FROM user WHERE name = ?", userName)
@@ -584,17 +576,32 @@ func getAddChannel(c echo.Context) error {
 		return err
 	}
 
-	channels := []ChannelInfo{}
-	err = db.Select(&channels, "SELECT * FROM channel ORDER BY id")
-	if err != nil {
-		return err
-	}
+	channels := getChannels()
 
 	return c.Render(http.StatusOK, "add_channel", map[string]interface{}{
 		"ChannelID": 0,
 		"Channels":  channels,
 		"User":      self,
 	})
+}
+
+func getChannels() []ChannelInfo {
+	return Channels
+}
+
+func refreshChannels() error {
+	var l sync.RWMutex
+	channels := []ChannelInfo{}
+
+	err := db.Select(&channels, "SELECT * FROM channel ORDER BY id")
+	if err != nil {
+		return err
+	}
+	l.Lock()
+	Channels = channels
+	l.Unlock()
+
+	return nil
 }
 
 func postAddChannel(c echo.Context) error {
@@ -615,6 +622,11 @@ func postAddChannel(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if err := refreshChannels(); err != nil {
+		return err
+	}
+
 	lastID, _ := res.LastInsertId()
 	return c.Redirect(http.StatusSeeOther,
 		fmt.Sprintf("/channel/%v", lastID))

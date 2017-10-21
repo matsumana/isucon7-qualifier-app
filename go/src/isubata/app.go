@@ -463,33 +463,55 @@ func fetchUnread(c echo.Context) error {
 		return c.NoContent(http.StatusForbidden)
 	}
 
-	resp := []map[string]interface{}{}
-
 	channels := getChannels()
-	for _, ch := range channels {
-		lastID, err := queryHaveRead(userID, ch.ID)
-		if err != nil {
-			return err
-		}
 
-		var cnt int64
-		if lastID > 0 {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
-				ch.ID, lastID)
-		} else {
-			err = db.Get(&cnt,
-				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
-				ch.ID)
+	eChan := make(chan error)
+	resp := []map[string]interface{}{}
+	errs := make([]error, 1)
+	rChan := make(chan map[string]interface{}, len(channels))
+
+	go func() {
+		for {
+			select {
+			case r := <-rChan:
+				resp = append(resp, r)
+			case e := <-eChan:
+				errs[0] = e
+			}
 		}
-		if err != nil {
-			return err
-		}
-		r := map[string]interface{}{
-			"channel_id": ch.ID,
-			"unread":     cnt}
-		resp = append(resp, r)
+	}()
+
+	query := "SELECT COUNT(1) as cnt FROM message WHERE channel_id = ?"
+	var wg sync.WaitGroup
+	for _, ch := range channels {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lastID, err := queryHaveRead(userID, ch.ID)
+			if err != nil {
+				eChan <- err
+			}
+
+			var cnt int64
+			if lastID > 0 {
+				err = db.Get(&cnt, query+" AND ? < id", ch.ID, lastID)
+			} else {
+				err = db.Get(&cnt, query, ch.ID)
+			}
+			if err != nil {
+				eChan <- err
+			}
+			r := map[string]interface{}{
+				"channel_id": ch.ID,
+				"unread":     cnt}
+			rChan <- r
+		}()
 	}
+	wg.Wait()
+	if len(errs) != 0 {
+		return errs[0]
+	}
+	close(rChan)
 
 	return c.JSON(http.StatusOK, resp)
 }

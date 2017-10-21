@@ -18,13 +18,14 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/middleware"
-	"sync"
 )
 
 const (
@@ -716,6 +717,9 @@ func getIcon(c echo.Context) error {
 	default:
 		return echo.ErrNotFound
 	}
+
+	writeImage(name, mime, data)
+
 	return c.Blob(http.StatusOK, mime, data)
 }
 
@@ -729,6 +733,29 @@ func tRange(a, b int64) []int64 {
 		r[i] = a + i
 	}
 	return r
+}
+
+func writeImage(name string, mime string, data []byte) {
+	var ext string
+	switch mime {
+	case "image/jpeg":
+		ext = ".jpg"
+	case "image/png":
+		ext = ".png"
+	case "image/gif":
+		ext = ".gif"
+	default:
+		fmt.Println("Failed to write file: ", name, mime)
+		return
+	}
+
+	fn := fmt.Sprintf("../public/image/%s%s", name, ext)
+	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		panic(err)
+	}
+	f.Write(data)
+	f.Close()
 }
 
 func main() {

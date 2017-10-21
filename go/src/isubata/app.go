@@ -18,14 +18,13 @@ import (
 	"strings"
 	"time"
 
-	"sync"
-
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/middleware"
+	"sync"
 )
 
 const (
@@ -463,58 +462,33 @@ func fetchUnread(c echo.Context) error {
 		return c.NoContent(http.StatusForbidden)
 	}
 
-	channels := getChannels()
-
-	eChan := make(chan error)
 	resp := []map[string]interface{}{}
-	var errs []error
-	rChan := make(chan map[string]interface{}, len(channels))
 
-	go func() {
-		for {
-			select {
-			case r := <-rChan:
-				resp = append(resp, r)
-			case e := <-eChan:
-				errs = append(errs, e)
-			}
-		}
-	}()
-
-	query := "SELECT COUNT(1) as cnt FROM message WHERE channel_id = ?"
-	var wg sync.WaitGroup
+	channels := getChannels()
 	for _, ch := range channels {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			lastID, err := queryHaveRead(userID, ch.ID)
-			if err != nil {
-				eChan <- err
-				return
-			}
+		lastID, err := queryHaveRead(userID, ch.ID)
+		if err != nil {
+			return err
+		}
 
-			var cnt int64
-			if lastID > 0 {
-				err = db.Get(&cnt, query+" AND ? < id", ch.ID, lastID)
-			} else {
-				err = db.Get(&cnt, query, ch.ID)
-			}
-			if err != nil {
-				eChan <- err
-				return
-			}
-			rChan <- map[string]interface{}{
-				"channel_id": ch.ID,
-				"unread":     cnt,
-			}
-		}()
+		var cnt int64
+		if lastID > 0 {
+			err = db.Get(&cnt,
+				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
+				ch.ID, lastID)
+		} else {
+			err = db.Get(&cnt,
+				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
+				ch.ID)
+		}
+		if err != nil {
+			return err
+		}
+		r := map[string]interface{}{
+			"channel_id": ch.ID,
+			"unread":     cnt}
+		resp = append(resp, r)
 	}
-	wg.Wait()
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	close(eChan)
-	close(rChan)
 
 	return c.JSON(http.StatusOK, resp)
 }

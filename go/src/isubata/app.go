@@ -608,7 +608,7 @@ func getChannels() []ChannelInfo {
 }
 
 func refreshChannels() error {
-	var l sync.RWMutex
+	var l sync.Mutex
 	channels := []ChannelInfo{}
 
 	err := db.Select(&channels, "SELECT * FROM channel ORDER BY id")

@@ -83,10 +83,6 @@ func init() {
 	db.SetMaxOpenConns(20)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	log.Printf("Succeeded to connect db.")
-	err := refreshChannels()
-	if err != nil {
-		log.Fatal("failed to get channel info: ", err.Error())
-	}
 }
 
 type User struct {

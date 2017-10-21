@@ -490,6 +490,7 @@ func fetchUnread(c echo.Context) error {
 			lastID, err := queryHaveRead(userID, ch.ID)
 			if err != nil {
 				eChan <- err
+				return
 			}
 
 			var cnt int64
@@ -500,6 +501,7 @@ func fetchUnread(c echo.Context) error {
 			}
 			if err != nil {
 				eChan <- err
+				return
 			}
 			r := map[string]interface{}{
 				"channel_id": ch.ID,

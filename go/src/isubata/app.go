@@ -467,7 +467,7 @@ func fetchUnread(c echo.Context) error {
 	resp := []map[string]interface{}{}
 
 	channels := getChannels()
-	var l sync.RWMutex
+	var l sync.Mutex
 
 	for _, ch := range channels {
 		lastID, err := queryHaveRead(userID, ch.ID)
@@ -619,7 +619,7 @@ func getChannels() []ChannelInfo {
 }
 
 func refreshChannels() error {
-	var l sync.RWMutex
+	var l sync.Mutex
 	channels := []ChannelInfo{}
 
 	err := db.Select(&channels, "SELECT * FROM channel ORDER BY id")
@@ -634,7 +634,7 @@ func refreshChannels() error {
 }
 
 func refreshMessageCounts(id int64) error {
-	var l sync.RWMutex
+	var l sync.Mutex
 	var cnt int64
 	err := db.Get(&cnt,
 		"SELECT COUNT(1) as cnt FROM message WHERE channel_id = ?", id)

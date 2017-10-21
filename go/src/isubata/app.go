@@ -234,6 +234,10 @@ func getInitialize(c echo.Context) error {
 	db.MustExec("DELETE FROM channel WHERE id > 10")
 	db.MustExec("DELETE FROM message WHERE id > 10000")
 	db.MustExec("DELETE FROM haveread")
+	err := refreshChannels()
+	if err != nil {
+		log.Fatal("failed to get channel info: ", err.Error())
+	}
 	return c.String(204, "")
 }
 

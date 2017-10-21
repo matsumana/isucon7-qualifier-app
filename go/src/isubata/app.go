@@ -718,8 +718,6 @@ func getIcon(c echo.Context) error {
 		return echo.ErrNotFound
 	}
 
-	writeImage(name, mime, data)
-
 	return c.Blob(http.StatusOK, mime, data)
 }
 
@@ -749,7 +747,7 @@ func writeImage(name string, mime string, data []byte) {
 		return
 	}
 
-	fn := fmt.Sprintf("../public/image/%s%s", name, ext)
+	fn := fmt.Sprintf("../public/icons/%s%s", name, ext)
 	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		panic(err)

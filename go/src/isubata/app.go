@@ -664,10 +664,8 @@ func postProfile(c echo.Context) error {
 	}
 
 	if avatarName != "" && len(avatarData) > 0 {
-		_, err := db.Exec("INSERT INTO image (name, data) VALUES (?, ?)", avatarName, avatarData)
-		if err != nil {
-			return err
-		}
+		writeImage(avatarName, avatarData)
+
 		_, err = db.Exec("UPDATE user SET avatar_icon = ? WHERE id = ?", avatarName, self.ID)
 		if err != nil {
 			return err
@@ -685,6 +683,8 @@ func postProfile(c echo.Context) error {
 }
 
 func getIcon(c echo.Context) error {
+	log.Println("get icon.")
+
 	var name string
 	var data []byte
 	err := db.QueryRow("SELECT name, data FROM image WHERE name = ?",
@@ -723,21 +723,8 @@ func tRange(a, b int64) []int64 {
 	return r
 }
 
-func writeImage(name string, mime string, data []byte) {
-	var ext string
-	switch mime {
-	case "image/jpeg":
-		ext = ".jpg"
-	case "image/png":
-		ext = ".png"
-	case "image/gif":
-		ext = ".gif"
-	default:
-		fmt.Println("Failed to write file: ", name, mime)
-		return
-	}
-
-	fn := fmt.Sprintf("../public/icons/%s%s", name, ext)
+func writeImage(name string, data []byte) {
+	fn := fmt.Sprintf("../public/icons/%s", name)
 	f, err := os.OpenFile(fn, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		panic(err)

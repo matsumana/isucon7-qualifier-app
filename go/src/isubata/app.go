@@ -467,7 +467,7 @@ func fetchUnread(c echo.Context) error {
 
 	eChan := make(chan error)
 	resp := []map[string]interface{}{}
-	errs := make([]error, 1)
+	var errs []error
 	rChan := make(chan map[string]interface{}, len(channels))
 
 	go func() {
@@ -476,7 +476,7 @@ func fetchUnread(c echo.Context) error {
 			case r := <-rChan:
 				resp = append(resp, r)
 			case e := <-eChan:
-				errs[0] = e
+				errs = append(errs, e)
 			}
 		}
 	}()
@@ -503,16 +503,17 @@ func fetchUnread(c echo.Context) error {
 				eChan <- err
 				return
 			}
-			r := map[string]interface{}{
+			rChan <- map[string]interface{}{
 				"channel_id": ch.ID,
-				"unread":     cnt}
-			rChan <- r
+				"unread":     cnt,
+			}
 		}()
 	}
 	wg.Wait()
-	if len(errs) != 0 {
+	if len(errs) > 0 {
 		return errs[0]
 	}
+	close(eChan)
 	close(rChan)
 
 	return c.JSON(http.StatusOK, resp)

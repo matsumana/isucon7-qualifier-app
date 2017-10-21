@@ -17,14 +17,13 @@ import (
 	"strings"
 	"time"
 
-	"sync"
-
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/middleware"
+	"sync"
 )
 
 const (
@@ -35,7 +34,6 @@ var (
 	db            *sqlx.DB
 	ErrBadReqeust = echo.NewHTTPError(http.StatusBadRequest)
 	Channels      = []ChannelInfo{}
-	MessageCounts = make(map[int64]int64)
 )
 
 type Renderer struct {
@@ -115,7 +113,6 @@ func addMessage(channelID, userID int64, content string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	refreshMessageCounts(channelID)
 	return res.LastInsertId()
 }
 
@@ -467,8 +464,6 @@ func fetchUnread(c echo.Context) error {
 	resp := []map[string]interface{}{}
 
 	channels := getChannels()
-	var l sync.RWMutex
-
 	for _, ch := range channels {
 		lastID, err := queryHaveRead(userID, ch.ID)
 		if err != nil {
@@ -481,15 +476,9 @@ func fetchUnread(c echo.Context) error {
 				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ? AND ? < id",
 				ch.ID, lastID)
 		} else {
-			cnt, ok := MessageCounts[ch.ID]
-			if !ok {
-				err = db.Get(&cnt,
-					"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
-					ch.ID)
-				l.Lock()
-				MessageCounts[ch.ID] = cnt
-				l.Unlock()
-			}
+			err = db.Get(&cnt,
+				"SELECT COUNT(*) as cnt FROM message WHERE channel_id = ?",
+				ch.ID)
 		}
 		if err != nil {
 			return err
@@ -628,21 +617,6 @@ func refreshChannels() error {
 	}
 	l.Lock()
 	Channels = channels
-	l.Unlock()
-
-	return nil
-}
-
-func refreshMessageCounts(id int64) error {
-	var l sync.RWMutex
-	var cnt int64
-	err := db.Get(&cnt,
-		"SELECT COUNT(1) as cnt FROM message WHERE channel_id = ?", id)
-	if err != nil {
-		return err
-	}
-	l.Lock()
-	MessageCounts[id] = cnt
 	l.Unlock()
 
 	return nil
